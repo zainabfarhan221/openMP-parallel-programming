@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
-
-#define MAX_SIZE 2000  
+#define MAX_SIZE 1024
+#define NUM_RUNS 10
+#define CHUNK_SIZE 200
+ // Define the chunk size for static scheduling
 
 void initialize_matrix(double A[MAX_SIZE][MAX_SIZE], int N) {
     for (int i = 0; i < N; i++)
@@ -16,7 +18,7 @@ double determinant_parallel_static(double A[MAX_SIZE][MAX_SIZE], int N) {
         if (A[i][i] == 0) {
             for (int j = i + 1; j < N; j++) {
                 if (A[j][i] != 0) {
-                    #pragma omp parallel for
+                    #pragma omp parallel for schedule(static, CHUNK_SIZE)
                     for (int k = 0; k < N; k++) {
                         double temp = A[i][k];
                         A[i][k] = A[j][k];
@@ -30,7 +32,8 @@ double determinant_parallel_static(double A[MAX_SIZE][MAX_SIZE], int N) {
         }
         if (A[i][i] == 0)
             return 0;
-        #pragma omp parallel for schedule(static) shared(A)
+
+        #pragma omp parallel for schedule(static, CHUNK_SIZE) shared(A)
         for (int j = i + 1; j < N; j++) {
             double factor = A[j][i] / A[i][i];
             for (int k = i; k < N; k++) {
@@ -44,23 +47,30 @@ double determinant_parallel_static(double A[MAX_SIZE][MAX_SIZE], int N) {
 }
 
 int main() {
-    int sizes[] = {512, 1024, 2000};
+    int N = 2000;
     int num_threads[] = {4, 8};
     
     for (int t = 0; t < 2; t++) {
         omp_set_num_threads(num_threads[t]);
-        printf("\n--- Static Scheduling with %d Threads ---\n", num_threads[t]);
-        for (int s = 0; s < 3; s++) {
-            int N = sizes[s];
-            printf("\nMatrix Size: %d x %d\n", N, N);
+        printf("\n--- Static Scheduling with %d Threads (Chunk Size: %d) ---\n", num_threads[t], CHUNK_SIZE);
+        printf("\nMatrix Size: %d x %d\n", N, N);
+        double total_time = 0.0;
+        double determinant = 0.0;
+        
+        for (int run = 0; run < NUM_RUNS; run++) {
             static double A[MAX_SIZE][MAX_SIZE];
             initialize_matrix(A, N);
             double start = omp_get_wtime();
-            double det = determinant_parallel_static(A, N);
+            determinant = determinant_parallel_static(A, N);
             double end = omp_get_wtime();
-            printf("Execution Time: %.6f sec\n", end - start);
-            printf("Determinant: %.6f\n", det);
+            double exec_time = end - start;
+            total_time += exec_time;
+            printf("Run %d Execution Time: %.6f sec\n", run + 1, exec_time);
         }
+        
+        double avg_time = total_time / NUM_RUNS;
+        printf("Average Execution Time: %.6f sec\n", avg_time);
+        printf("Determinant (last run): %.6f\n", determinant);
     }
     return 0;
 }
